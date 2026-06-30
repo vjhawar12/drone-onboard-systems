@@ -1,0 +1,49 @@
+Purpose:
+
+        This MCU runs a finite state machine LOCKED -> ARMED -> RELEASING -> RETRACTING with a FAULT state. It will maintain a wired
+        connection with the onboard Jetson Nano companion computer.
+
+        A standard clock speed is fine, as no high-speed peripherals are needed, nor ultra-precise timing.         
+
+        It does not need to be ultra-low power as the drone's flight time is ~30 minutes.
+
+        A non-RTOS bare-metal architecture will be used as this MCU has a single, clearly-defined purpose.
+
+        There is a single firmware image for the MCU, no bootloader needed.
+
+        For now, OTA will not be enabled, so only a single slot for the firmware image will be needed.
+
+Requirements:
+        Clock speed: 32-64 MHz
+
+        Flash: 128-256 KB
+
+        RAM: 32-64 KB
+
+        GPIO: 
+
+        UART TX/RX to Jetson or flight controller:       2
+        SWD debug:                                       2
+        Reset pin / boot pin considerations:             1–2
+        Servo PWM output:                                1
+        Actuator enable / MOSFET / relay output:         1
+        Limit switch / release confirmation:             1–2
+        Safety/interlock input:                          1
+        Status LED(s):                                   1–2
+        Optional I2C sensor:                             2
+        Optional CAN:                                    2
+        Spare pins for revision 2:                       3+
+
+        ~20 pins
+
+        Timers: 1-2 PWM timers in case we plan on adding a second actuator
+
+        Comms: I2C (sensors), CAN (flight controller), and UART (companion computer / flight controller). SPI is not needed.
+
+        Debug: SWD
+
+        Safety: Watchdog + Brownout reset
+
+Top choice based on purpose, requirements, budget, and availability:
+        
+        STM32G0B1KB
