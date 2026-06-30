@@ -22,8 +22,8 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdint.h"
 /* USER CODE END Includes */
-
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
 
@@ -55,9 +55,9 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern UART_HandleTypeDef huart1;
-/* USER CODE BEGIN EV */
 
+/* USER CODE BEGIN EV */
+extern uint32_t systick_counter;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -124,10 +124,14 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
-  /* USER CODE BEGIN SysTick_IRQn 0 */
+    if (systick_counter == UINT32_MAX) {
+        systick_counter == 0;
+    }
 
+    systick_counter++;
+  /* USER CODE BEGIN SysTick_IRQn 0 */
   /* USER CODE END SysTick_IRQn 0 */
-  HAL_IncTick();
+
   /* USER CODE BEGIN SysTick_IRQn 1 */
 
   /* USER CODE END SysTick_IRQn 1 */
@@ -148,7 +152,6 @@ void USART1_IRQHandler(void)
   /* USER CODE BEGIN USART1_IRQn 0 */
 
   /* USER CODE END USART1_IRQn 0 */
-  HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
 
   /* USER CODE END USART1_IRQn 1 */
