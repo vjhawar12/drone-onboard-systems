@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "state_machine.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,7 +105,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    state_machine_loop();
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -451,8 +451,7 @@ static void MX_USART1_UART_Init(void)
   NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE BEGIN USART1_Init 1 */
-  LL_USART_EnableDirectionRx(USART1);
-  LL_USART_EnableDirectionTx(USART1);
+
   /* USER CODE END USART1_Init 1 */
   USART_InitStruct.PrescalerValue = LL_USART_PRESCALER_DIV1;
   USART_InitStruct.BaudRate = 115200;
