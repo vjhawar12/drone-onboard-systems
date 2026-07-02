@@ -22,8 +22,8 @@
 #include "stm32g0xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdint.h"
 /* USER CODE END Includes */
+
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
 
@@ -55,9 +55,9 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-
+extern TIM_HandleTypeDef htim2;
 /* USER CODE BEGIN EV */
-extern uint32_t systick_counter;
+
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -124,14 +124,10 @@ void PendSV_Handler(void)
   */
 void SysTick_Handler(void)
 {
-    if (systick_counter == UINT32_MAX) {
-        systick_counter == 0;
-    }
-
-    systick_counter++;
   /* USER CODE BEGIN SysTick_IRQn 0 */
-  /* USER CODE END SysTick_IRQn 0 */
 
+  /* USER CODE END SysTick_IRQn 0 */
+  HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
 
   /* USER CODE END SysTick_IRQn 1 */
@@ -143,6 +139,20 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32g0xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles TIM2 global interrupt.
+  */
+void TIM2_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM2_IRQn 0 */
+
+  /* USER CODE END TIM2_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim2);
+  /* USER CODE BEGIN TIM2_IRQn 1 */
+
+  /* USER CODE END TIM2_IRQn 1 */
+}
 
 /**
   * @brief This function handles USART1 global interrupt / USART1 wake-up interrupt through EXTI line 25.

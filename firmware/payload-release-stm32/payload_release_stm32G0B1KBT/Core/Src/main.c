@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "app.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -41,6 +41,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+TIM_HandleTypeDef htim2;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -51,6 +53,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -74,15 +77,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
-  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
-
-  /* SysTick_IRQn interrupt configuration */
-  NVIC_SetPriority(SysTick_IRQn, 3);
-
-  /** Disable the internal Pull-Up in Dead Battery pins of UCPD peripheral
-  */
-  LL_SYSCFG_DisableDBATT(LL_SYSCFG_UCPD1_STROBE);
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -100,8 +95,9 @@ int main(void)
   MX_TIM1_Init();
   MX_USART1_UART_Init();
   MX_ADC1_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  app_init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -109,7 +105,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-      app_update();
 
     /* USER CODE BEGIN 3 */
   }
@@ -152,9 +147,14 @@ void SystemClock_Config(void)
 
   /* Set APB1 prescaler*/
   LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
-  LL_Init1msTick(64000000);
   /* Update CMSIS variable (which can be updated also through SystemCoreClockUpdate function) */
   LL_SetSystemCoreClock(64000000);
+
+   /* Update the time base */
+  if (HAL_InitTick (TICK_INT_PRIORITY) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
@@ -336,13 +336,71 @@ static void MX_TIM1_Init(void)
   /**TIM1 GPIO Configuration
   PA8   ------> TIM1_CH1
   */
-  GPIO_InitStruct.Pin = LL_GPIO_PIN_8;
+  GPIO_InitStruct.Pin = SERVO_PWM_Pin;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
   GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
   GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
   GPIO_InitStruct.Alternate = LL_GPIO_AF_2;
-  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  LL_GPIO_Init(SERVO_PWM_GPIO_Port, &GPIO_InitStruct);
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 63;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
 
 }
 
@@ -393,7 +451,8 @@ static void MX_USART1_UART_Init(void)
   NVIC_EnableIRQ(USART1_IRQn);
 
   /* USER CODE BEGIN USART1_Init 1 */
-
+  LL_USART_EnableDirectionRx(USART1);
+  LL_USART_EnableDirectionTx(USART1);
   /* USER CODE END USART1_Init 1 */
   USART_InitStruct.PrescalerValue = LL_USART_PRESCALER_DIV1;
   USART_InitStruct.BaudRate = 115200;
@@ -432,12 +491,24 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   LL_IOP_GRP1_EnableClock(LL_IOP_GRP1_PERIPH_GPIOA);
+
+  /**/
+  LL_GPIO_ResetOutputPin(ULTRASONIC_TRIG_GPIO_Port, ULTRASONIC_TRIG_Pin);
+
+  /**/
+  GPIO_InitStruct.Pin = ULTRASONIC_TRIG_Pin;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  LL_GPIO_Init(ULTRASONIC_TRIG_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

@@ -188,8 +188,11 @@ void LL_mDelay(uint32_t Delay)
   }
 }
 
-/*
-addtogroup UTILS_EF_SYSTEM
+/**
+  * @}
+  */
+
+/** @addtogroup UTILS_EF_SYSTEM
   *  @brief    System Configuration functions
   *
   @verbatim
