@@ -102,12 +102,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    /* USER CODE END WHILE */
-    state_machine_loop();
-    /* USER CODE BEGIN 3 */
-  }
+  state_machine_loop();
   /* USER CODE END 3 */
 }
 

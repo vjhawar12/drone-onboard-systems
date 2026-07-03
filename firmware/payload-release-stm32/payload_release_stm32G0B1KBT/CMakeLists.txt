@@ -49,6 +49,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/servo.c
     Core/Src/timer.c
     Core/Src/uart.c
+    Core/Src/sensors.c
+    Core/Src/SEGGER_RTT.c
+    Core/Src/SEGGER_RTT_printf.c
 )
 
 # Add include paths

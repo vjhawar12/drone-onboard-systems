@@ -4,8 +4,9 @@
 #include "timer.h"
 #include <stdint.h>
 #include "uart.h"
+#include "SEGGER_RTT.h"
 
-uart_error_t UART_tx(uint8_t byte) {
+uart_error_t __UART_tx(uint8_t byte) {
     LL_USART_TransmitData8(USART1, byte);
     uint32_t start = millis();
     while (!LL_USART_IsActiveFlag_TC(USART1)) {        
@@ -17,7 +18,13 @@ uart_error_t UART_tx(uint8_t byte) {
     return NONE;
 }
 
-uart_error_t UART_rx(uint8_t *byte) {
+void UART_tx(uint8_t byte) {
+    if (__UART_tx(byte) != NONE) {
+        SEGGER_RTT_printf(0, "Error with UART tx", __FILE__, __LINE__); 
+    } 
+}
+
+uart_error_t __UART_rx(char *buffer) {
     uint32_t start = millis();
     while (!LL_USART_IsActiveFlag_RXNE_RXFNE(USART1)) {
         // if timeout return error
@@ -25,6 +32,12 @@ uart_error_t UART_rx(uint8_t *byte) {
             return ERR_RX;
         }
     }
-    *byte = LL_USART_ReceiveData8(USART1);
+    *buffer = LL_USART_ReceiveData8(USART1);
     return NONE;
+}
+
+void UART_rx(char *buffer) {
+    if (__UART_rx(buffer) != NONE) {
+        SEGGER_RTT_printf(0, "Error with UART rx", __FILE__, __LINE__); 
+    } 
 }
