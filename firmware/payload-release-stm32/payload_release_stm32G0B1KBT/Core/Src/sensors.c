@@ -11,17 +11,19 @@ void ultrasonic_trigger() {
     LL_GPIO_ResetOutputPin(GPIOA, LL_GPIO_PIN_6);
 }
 
-sensor_err_t __ultrasonic_distance_cm(uint16_t *buffer) {
+app_err_t __ultrasonic_distance_cm(uint16_t *buffer) {
     int distance = time_diff / 58;
     if (distance <= 0) {
         return ERR_ULTRASONIC;
     }
     *buffer = distance;
-    return ERR_NONE;   
+    return NONE;   
 }
 
-void ultrasonic_distance_cm(uint16_t *buffer) {
-    if (__ultrasonic_distance_cm(buffer) != ERR_NONE) {
-        SEGGER_RTT_printf(0, "Error retrieving ultrasonic distance", __FILE__, __LINE__); 
+app_err_t ultrasonic_distance_cm(uint16_t *buffer) {
+    if (__ultrasonic_distance_cm(buffer) != NONE) {
+        SEGGER_RTT_printf(0, "Error retrieving ultrasonic distance in File %s Line %d ", __FILE__, __LINE__); 
+        return ERR_ULTRASONIC;
     } 
+    return NONE;
 }

@@ -14,27 +14,33 @@ int override = 0; // ultrasonic override
 
 void fault() {
     const char *buffer = "MCU: Fault";
-    UART_tx(*buffer);
+    UART_tx_line(buffer, strlen(buffer));
 }
 
 void state_machine_loop() {
     char buffer[256];
-    uint16_t **buffer2 = 0;
+    uint16_t samples[MAX_TRIES] = {0};
     uint16_t distance_avg = 0;
 
     while (1) {
-        UART_rx((uint8_t*)buffer);
-        if (!strncmp(buffer, "LOCK", 4)) {
+        if (UART_rx_line(buffer, -1) != NONE) {
+            continue;
+        } else if (!strncmp(buffer, "LOCK", 4)) {
             state = LOCK;
         }  else if (state == LOCK && !strncmp(buffer, "ARM", 3)) {
             state = ARM;
         }  else if (state == ARM && !strncmp(buffer, "RELEASE", 7)) {
+            distance_avg = 0;
             if (!override) {
                 for (int i = 0; i < MAX_TRIES; i++) {
                     ultrasonic_trigger();
-                    ultrasonic_distance_cm(buffer2[i]);
-                    distance_avg += *buffer2[i];
+                    if (ultrasonic_distance_cm(&samples[i]) != NONE) {
+                        state = FAULT;
+                        break;
+                    }
+                    distance_avg += samples[i];
                 }
+                if (state == FAULT) continue;
                 distance_avg /= MAX_TRIES;
                 if (distance_avg <= DIST_THRESH_CM) {
                     state = RELEASE;

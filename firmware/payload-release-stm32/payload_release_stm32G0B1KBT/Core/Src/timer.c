@@ -4,9 +4,9 @@
 #include <stdint.h>
 #include "timer.h"
 
-int tick_high = 0;
-int tick_low = 0;
-int time_diff = 0;
+volatile int tick_high = 0;
+volatile int tick_low = 0;
+volatile int time_diff = 0;
 
 uint32_t micros() {
     return LL_TIM_GetCounter(TIM2);

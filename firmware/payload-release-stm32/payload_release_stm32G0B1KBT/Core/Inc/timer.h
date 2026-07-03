@@ -4,9 +4,9 @@
 #include "stm32g0xx_hal.h"
 #include <stdint.h>
 
-extern int tick_high;
-extern int tick_low;
-extern int time_diff;
+extern volatile int tick_high;
+extern volatile int tick_low;
+extern volatile int time_diff;
 
 uint32_t micros();
 uint32_t millis();
