@@ -29,8 +29,8 @@ app_err_t UART_tx(const char byte) {
 
 app_err_t UART_tx_line(const char *buffer, int length) {
     for (int i = 0; i < length; i++) {
-        if (UART_tx(buffer[i]) == ERR_RX) {
-            return ERR_RX;
+        if (UART_tx(buffer[i]) == ERR_TX) {
+            return ERR_TX;
         }
     }
     return NONE;
@@ -59,10 +59,11 @@ app_err_t UART_rx(char *buffer) {
 app_err_t UART_rx_line(char *buffer, int length) {
     if (length == -1) {
         int i = 0;
-        while (UART_rx(&buffer[i++]) != ERR_RX) {
+        while (UART_rx(&buffer[i]) != ERR_RX) {
             if (buffer[i] == '\n') {
                 return NONE;
             }
+            i++;
         }
         return ERR_RX;
     } else {
