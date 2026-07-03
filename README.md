@@ -1,31 +1,36 @@
 # Drone Onboard Systems
 
-Onboard companion-computer software for an autonomous drone system, developed around the **AEAC Fire Reconnaissance UAS Competition**. This repository collects the higher-level software that runs alongside the flight controller, including perception, payload-control support, daemon health reporting, and bench-test tooling.
+Companion-computer software for an autonomous drone system developed around the **AEAC Fire Reconnaissance UAS Competition**.
 
-The current codebase is split into two main companion-computer subsystems:
+This repository focuses on onboard software that runs beside the flight controller, not the flight-controller firmware itself. The current codebase covers perception, MAVLink attitude intake, payload-command support, daemon health reporting, and bench-test workflows.
 
-- **Vision pipeline**: real-time color/depth processing using an Orbbec Gemini 2 depth camera
-- **Health daemon**: lightweight Linux C daemon for local command handling, system health reporting, and UART communication with the payload MCU
+## Current subsystems
+
+- **Vision pipeline** (`companion/vision`): Python pipeline for Orbbec Gemini 2 color/depth capture, HSV target segmentation, optional YOLO landmark inference, RANSAC wall/plane estimation, and MAVLink attitude input.
+- **Health daemon** (`companion/health_daemon`): Linux C daemon that exposes a localhost TCP command interface, reports basic health/uptime, bridges payload commands over UART, and provides simulation commands for bench testing without the payload MCU attached.
 
 ## Repository layout
 
 ```text
 .
+├── README.md
 └── companion/
     ├── health_daemon/
-    │   ├── healthd.c
-    │   └── README.md
+    │   ├── README.md
+    │   └── healthd.c
     └── vision/
         ├── README.md
-        ├── main.py
         ├── camera.py
-        ├── segmentation.py
+        ├── config.py
+        ├── demo.png
+        ├── main.py
+        ├── mavlink.py
         ├── ransac_worker.py
-        ├── vision_app.py
         ├── renderer.py
+        ├── segmentation.py
         ├── shared_state.py
-        ├── yolo_worker.py
-        └── config.py
+        ├── vision_app.py
+        └── yolo_worker.py
 ```
 
 ## System overview
@@ -33,66 +38,74 @@ The current codebase is split into two main companion-computer subsystems:
 ```mermaid
 flowchart LR
     Camera[Orbbec Gemini 2\ncolor + depth] --> Vision[Vision pipeline\nPython]
-    Vision --> Detections[Target detection\ndistance + overlays]
+    Vision --> Segmentation[HSV target detection\ncolored circular targets]
+    Vision --> YOLO[YOLO landmark inference\noptional worker]
+    Vision --> RANSAC[RANSAC wall / plane estimate]
+    FlightController[Flight controller / SITL\nMAVLink attitude stream] --> MAVLink[MAVLink reader\npymavlink]
+    MAVLink --> RANSAC
+    Vision --> Display[Live OpenCV display\noverlays + debug output]
 
-    Client[Local TCP client\noperator / test script] --> HealthD[Health daemon\nC / Linux]
-    HealthD --> Linux[Companion computer\n/proc uptime + health]
+    Client[Local TCP client\nnc / test script] --> HealthD[Health daemon\nC / Linux]
+    HealthD --> Linux[/proc/uptime\ndaemon health]
     HealthD -->|UART @ 115200| MCU[Payload MCU]
     MCU --> Payload[Payload release mechanism]
 ```
 
-The companion computer is responsible for running perception and support services that sit above the low-level flight controller. The vision stack handles target perception from synchronized color/depth frames, while the health daemon provides a simple local TCP interface for testing and forwarding payload-control commands over UART.
+The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding.
 
-## Subsystems
+## `companion/vision`
 
-### `companion/vision`
+Real-time vision pipeline for AEAC target and landmark perception.
 
-Real-time vision pipeline for the AEAC Fire Reconnaissance UAS mission, built around the **Orbbec Gemini 2** depth camera.
+Current capabilities:
 
-Key features:
+- Starts an Orbbec Gemini 2 color/depth pipeline using `pyorbbecsdk`
+- Aligns depth frames to the color stream
+- Filters depth to a configured valid range of `20 mm` to `10000 mm`
+- Detects colored circular targets with HSV masks and contour geometry
+- Runs optional YOLO inference every configured interval after a target is detected
+- Estimates target-to-landmark distances using depth-to-3D conversion
+- Runs RANSAC on sampled depth points to estimate a dominant non-ground plane/wall
+- Reads MAVLink `ATTITUDE` messages and stores pitch/roll for RANSAC
+- Displays a live OpenCV feed with target/landmark annotations
 
-- Streams synchronized color and depth frames
-- Aligns depth to the color image
-- Detects colored circular targets using HSV segmentation
-- Estimates target distance from depth data
-- Fits dominant planes using RANSAC
-- Displays live overlays and debug views
-- Includes an optional YOLO worker for landmark detection
+See [`companion/vision/README.md`](companion/vision/README.md) for dependencies, run notes, configuration details, and current integration caveats.
 
-See [`companion/vision/README.md`](companion/vision/README.md) for pipeline details and run instructions.
+## `companion/health_daemon`
 
-### `companion/health_daemon`
+Lightweight Linux daemon for payload-subsystem command handling and status reporting.
 
-Lightweight Linux daemon written in C for payload-subsystem health and command handling.
+Current capabilities:
 
-Key features:
-
-- Starts a local TCP command server on `127.0.0.1:5050`
+- Binds a local TCP command server to `127.0.0.1:5050`
+- Accepts simple line-based commands from `nc` or a local test script
 - Reports daemon liveness and Linux uptime from `/proc/uptime`
 - Tracks accumulated daemon errors using a bitmask
-- Opens a UART connection to the payload MCU at `115200` baud
-- Forwards commands such as `LOCK`, `ARM`, `RELEASE`, `RETRACT`, and `DISTANCE`
-- Provides `SIM_*` commands for bench-testing state-machine behavior without hardware attached
+- Attempts to open the configured payload MCU serial device at `115200` baud
+- Forwards hardware commands such as `LOCK`, `ARM`, `RELEASE`, `RETRACT`, and `DISTANCE` over UART
+- Provides `SIM_*` commands for daemon-only state-machine testing
 - Handles `SIGINT` and `SIGTERM` for clean shutdown
 
 See [`companion/health_daemon/README.md`](companion/health_daemon/README.md) for build instructions, command references, and simulation examples.
 
 ## Quick start
 
-### Run the vision pipeline
+### Vision pipeline
 
 ```bash
 cd companion/vision
 python main.py
 ```
 
-Requirements:
+Before running, make sure the machine has:
 
-- Orbbec Gemini 2 depth camera
-- Direct USB 3 connection recommended
-- No other process using `/dev/video*`
+- Orbbec Gemini 2 connected over USB 3
+- Orbbec Python SDK / `pyorbbecsdk`
+- `opencv-python`, `numpy`, `ultralytics`, and `pymavlink`
+- A YOLO model matching `AppConfig.model_path` (`yolov10n.pt` by default)
+- A MAVLink endpoint available at `udpin:localhost:14540`, or a local code stub if testing vision without the flight-controller/SITL link
 
-### Build and run the health daemon
+### Health daemon
 
 ```bash
 cd companion/health_daemon
@@ -106,7 +119,7 @@ In another terminal:
 nc 127.0.0.1 5050
 ```
 
-Example daemon commands:
+Example daemon-only simulation commands:
 
 ```text
 STATUS
@@ -120,15 +133,13 @@ EXIT
 
 ## Development notes
 
-This repository is organized around small, testable onboard services rather than one monolithic application. Each subsystem has its own README with more detailed build/run instructions and behavior notes.
-
-The current focus areas are:
-
-- Robust perception under changing lighting, compression, and frame-failure conditions
-- Simple and observable payload-control support from the Linux companion computer
-- Bench-test workflows that allow subsystem validation without requiring the full drone stack
-- Clear subsystem documentation for bring-up, debugging, and future integration
+- The repository is organized around small onboard services rather than one monolithic drone application.
+- The health daemon can be tested without the payload MCU by using `SIM_*` commands.
+- Hardware-backed health-daemon commands require the configured serial device to exist and the MCU firmware to respond over UART.
+- The vision pipeline currently assumes a live Orbbec camera, a YOLO model path, and a MAVLink attitude source.
+- Current vision defaults are tuned for red/purple targets through `AppConfig("yolov10n.pt", "rp")` in `main.py`.
+- Run subsystem-level bench tests before integrating with the full drone stack.
 
 ## Project context
 
-This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, payload-control testing, and companion-computer health monitoring.
+This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, landmark-distance estimation, payload-control testing, and companion-computer health monitoring.
