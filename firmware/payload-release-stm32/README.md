@@ -1,4 +1,4 @@
-# Payload Release Controller (ESP32)
+# Payload Release Controller (STM32)
 
 ![Payload Release State Machine](architecture_diagram.png)
 
@@ -6,7 +6,7 @@
 ## Overview
 
 This module implements a deterministic, safety-gated payload release controller for a UAV system.  
-It runs on an ESP32 and communicates with a companion computer (Jetson) over UART.  
+It runs on an STM32 and communicates with a companion computer (Jetson) over UART.  
 The controller manages a servo-actuated latch using a non-blocking finite state machine (FSM) with explicit timing guarantees and fault handling.
 
 The design prioritizes:
@@ -24,8 +24,8 @@ Jetson (Companion Computer)
 → STM32 payload controller  
 → Servo-actuated mechanical latch  
 
-The Jetson issues high-level commands (ARM, RELEASE, LOCK, STOP).  
-The ESP32 handles all timing and actuator sequencing internally.
+The Jetson issues high-level commands (ARM, RELEASE, LOCK, STOP). 
+The STM32 handles all timing and actuator sequencing internally.
 
 ---
 
@@ -36,8 +36,8 @@ All commands are fixed-length 4-character ASCII tokens.
 | Command | Description | Valid From | Behavior |
 |---------|-------------|-------------|----------|
 | `LOCK`  | Force latch to locked position | Any | Immediately retracts servo |
-| `ARMD`  | Arm the release system | LOCKED | Enables release command |
-| `RELS`  | Initiate release sequence | ARMED | Starts timed release → retract sequence |
+| `ARM`  | Arm the release system | LOCKED | Enables release command |
+| `RELEASE/RETRACT`  | Initiate release sequence | ARMED | Starts timed release → retract sequence |
 | `STOP`  | Enter fault state | Any | Immediately retracts and enters FAULT |
 
 **Planned protocol extensions (in development):**
