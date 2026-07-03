@@ -37,18 +37,18 @@ This repository focuses on onboard software that runs beside the flight controll
 
 ```mermaid
 flowchart LR
-    Camera[Orbbec Gemini 2\ncolor + depth] --> Vision[Vision pipeline\nPython]
-    Vision --> Segmentation[HSV target detection\ncolored circular targets]
-    Vision --> YOLO[YOLO landmark inference\noptional worker]
-    Vision --> RANSAC[RANSAC wall / plane estimate]
-    FlightController[Flight controller / SITL\nMAVLink attitude stream] --> MAVLink[MAVLink reader\npymavlink]
+    Camera["Orbbec Gemini 2<br/>color + depth"] --> Vision["Vision pipeline<br/>Python"]
+    Vision --> Segmentation["HSV target detection<br/>colored circular targets"]
+    Vision --> YOLO["YOLO landmark inference<br/>optional worker"]
+    Vision --> RANSAC["RANSAC wall / plane estimate"]
+    FlightController["Flight controller / SITL<br/>MAVLink attitude stream"] --> MAVLink["MAVLink reader<br/>pymavlink"]
     MAVLink --> RANSAC
-    Vision --> Display[Live OpenCV display\noverlays + debug output]
+    Vision --> Display["Live OpenCV display<br/>overlays + debug output"]
 
-    Client[Local TCP client\nnc / test script] --> HealthD[Health daemon\nC / Linux]
-    HealthD --> Linux[/proc/uptime\ndaemon health]
-    HealthD -->|UART @ 115200| MCU[Payload MCU]
-    MCU --> Payload[Payload release mechanism]
+    Client["Local TCP client<br/>nc / test script"] --> HealthD["Health daemon<br/>C / Linux"]
+    HealthD --> Linux["/proc/uptime<br/>daemon health"]
+    HealthD -->|UART @ 115200| MCU["Payload MCU"]
+    MCU --> Payload["Payload release mechanism"]
 ```
 
 The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding.
