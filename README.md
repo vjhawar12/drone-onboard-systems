@@ -2,13 +2,13 @@
 
 Onboard software for an autonomous drone system developed around the **AEAC Fire Reconnaissance UAS Competition**.
 
-This repository covers software that runs on the drone outside the flight-controller firmware itself. It includes companion-computer services under `companion/` and embedded firmware under `firmware/`. The current codebase covers perception, MAVLink attitude intake, payload-command support, daemon health reporting, payload firmware, and bench-test workflows.
+This repository covers software that runs on the drone outside the flight-controller firmware itself. It includes companion-computer services under `companion/` and payload-controller firmware under `firmware/payload-release-stm32/`. The current codebase covers perception, MAVLink attitude intake, payload-command support, daemon health reporting, payload-release firmware, and bench-test workflows.
 
 ## Current subsystems
 
 - **Vision pipeline** (`companion/vision`): Python companion-computer pipeline for Orbbec Gemini 2 color/depth capture, HSV target segmentation, optional YOLO landmark inference, RANSAC wall/plane estimation, and MAVLink attitude input.
 - **Health daemon** (`companion/health_daemon`): Linux C companion-computer daemon that exposes a localhost TCP command interface, reports basic health/uptime, bridges payload commands over UART, and provides simulation commands for bench testing without the payload MCU attached.
-- **Firmware** (`firmware/`): Embedded-side firmware for onboard hardware such as the payload subsystem. This is separate from the flight-controller firmware and is intended to work with the companion-computer services through interfaces such as UART.
+- **Payload release firmware** (`firmware/payload-release-stm32`): Embedded payload-controller firmware for a servo-actuated release mechanism. The firmware README documents a deterministic, safety-gated finite state machine with explicit `LOCKED`, `ARMED`, `RELEASING`, `RETRACTING`, and `FAULT` states.
 
 ## Repository layout
 
@@ -33,7 +33,10 @@ This repository covers software that runs on the drone outside the flight-contro
 │       ├── vision_app.py
 │       └── yolo_worker.py
 └── firmware/
-    └── embedded firmware for onboard drone hardware
+    └── payload-release-stm32/
+        ├── README.md
+        ├── architecture_diagram.png
+        └── STM32 payload-release firmware project files
 ```
 
 ## System overview
@@ -50,11 +53,11 @@ flowchart LR
 
     Client["Local TCP client<br/>nc / test script"] --> HealthD["Health daemon<br/>C / Linux"]
     HealthD --> Linux["/proc/uptime<br/>daemon health"]
-    HealthD -->|UART @ 115200| PayloadFirmware["Payload firmware<br/>firmware/"]
-    PayloadFirmware --> Payload["Payload release mechanism"]
+    HealthD -->|UART @ 115200| PayloadFirmware["Payload release firmware<br/>firmware/payload-release-stm32"]
+    PayloadFirmware --> Payload["Servo-actuated<br/>payload latch"]
 ```
 
-The onboard software is split between the companion computer and embedded firmware targets. The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding. The `firmware/` folder contains the embedded-side code that runs on onboard hardware such as the payload subsystem.
+The onboard software is split between the companion computer and embedded firmware targets. The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding. The payload-release firmware runs the embedded-side latch state machine close to the actuator hardware.
 
 ## `companion/vision`
 
@@ -91,17 +94,20 @@ Current capabilities:
 
 See [`companion/health_daemon/README.md`](companion/health_daemon/README.md) for build instructions, command references, and simulation examples.
 
-## `firmware/`
+## `firmware/payload-release-stm32`
 
-Embedded firmware for onboard drone hardware, including payload-side logic that works with the companion-computer health daemon.
+Payload release controller firmware for the embedded side of the payload subsystem.
 
-Current role:
+Current capabilities documented by the firmware README:
 
-- Runs on embedded hardware separate from the companion computer
-- Handles low-level payload-subsystem behavior close to the actuator/sensor hardware
-- Communicates with the Linux health daemon over a serial/UART-style interface
-- Complements the daemon's `SIM_*` commands, which are for daemon-only bench testing
-- Keeps payload-control firmware separate from higher-level companion-computer services
+- Runs a deterministic finite state machine for a servo-actuated latch
+- Requires an armed state before release
+- Uses explicit payload states: `LOCKED`, `ARMED`, `RELEASING`, `RETRACTING`, and `FAULT`
+- Runs a timed release-to-retract sequence
+- Provides a fault override path that retracts the latch and enters `FAULT`
+- Communicates with the companion computer over UART
+
+The firmware README documents a fixed-length ASCII UART command protocol with tokens such as `LOCK`, `ARMD`, `RELS`, and `STOP`. The companion health daemon currently exposes higher-level command names such as `LOCK`, `ARM`, `RELEASE`, `RETRACT`, and `DISTANCE`, so the daemon-to-firmware command mapping should be verified during integration.
 
 This firmware is separate from the flight-controller stack. Flight control, stabilization, and autopilot behavior remain the responsibility of the flight controller and its firmware/software stack.
 
@@ -148,21 +154,26 @@ SIM_LOCK
 EXIT
 ```
 
-### Firmware
+### Payload release firmware
 
-Use the files under `firmware/` for embedded-side payload or onboard-hardware development. Build and flash steps depend on the specific MCU/toolchain used by that firmware target.
+```bash
+cd firmware/payload-release-stm32
+```
+
+Use the firmware files in this folder for embedded-side payload release development. Build and flash steps depend on the STM32 project configuration and toolchain used by this firmware target.
 
 ## Development notes
 
 - The repository is organized around small onboard services and embedded firmware modules rather than one monolithic drone application.
 - The companion-computer services live under `companion/`.
-- Embedded-side firmware lives under `firmware/`.
+- The payload-release firmware lives under `firmware/payload-release-stm32/`.
 - The health daemon can be tested without the payload MCU by using `SIM_*` commands.
 - Hardware-backed health-daemon commands require the configured serial device to exist and the MCU firmware to respond over UART.
+- The daemon command names and firmware UART protocol should be kept aligned as integration progresses.
 - The vision pipeline currently assumes a live Orbbec camera, a YOLO model path, and a MAVLink attitude source.
 - Current vision defaults are tuned for red/purple targets through `AppConfig("yolov10n.pt", "rp")` in `main.py`.
 - Run subsystem-level bench tests before integrating with the full drone stack.
 
 ## Project context
 
-This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, landmark-distance estimation, payload-control testing, embedded payload firmware, and companion-computer health monitoring.
+This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, landmark-distance estimation, payload-control testing, embedded payload-release firmware, and companion-computer health monitoring.
