@@ -1,36 +1,39 @@
 # Drone Onboard Systems
 
-Companion-computer software for an autonomous drone system developed around the **AEAC Fire Reconnaissance UAS Competition**.
+Onboard software for an autonomous drone system developed around the **AEAC Fire Reconnaissance UAS Competition**.
 
-This repository focuses on onboard software that runs beside the flight controller, not the flight-controller firmware itself. The current codebase covers perception, MAVLink attitude intake, payload-command support, daemon health reporting, and bench-test workflows.
+This repository covers software that runs on the drone outside the flight-controller firmware itself. It includes companion-computer services under `companion/` and embedded firmware under `firmware/`. The current codebase covers perception, MAVLink attitude intake, payload-command support, daemon health reporting, payload firmware, and bench-test workflows.
 
 ## Current subsystems
 
-- **Vision pipeline** (`companion/vision`): Python pipeline for Orbbec Gemini 2 color/depth capture, HSV target segmentation, optional YOLO landmark inference, RANSAC wall/plane estimation, and MAVLink attitude input.
-- **Health daemon** (`companion/health_daemon`): Linux C daemon that exposes a localhost TCP command interface, reports basic health/uptime, bridges payload commands over UART, and provides simulation commands for bench testing without the payload MCU attached.
+- **Vision pipeline** (`companion/vision`): Python companion-computer pipeline for Orbbec Gemini 2 color/depth capture, HSV target segmentation, optional YOLO landmark inference, RANSAC wall/plane estimation, and MAVLink attitude input.
+- **Health daemon** (`companion/health_daemon`): Linux C companion-computer daemon that exposes a localhost TCP command interface, reports basic health/uptime, bridges payload commands over UART, and provides simulation commands for bench testing without the payload MCU attached.
+- **Firmware** (`firmware/`): Embedded-side firmware for onboard hardware such as the payload subsystem. This is separate from the flight-controller firmware and is intended to work with the companion-computer services through interfaces such as UART.
 
 ## Repository layout
 
 ```text
 .
 ├── README.md
-└── companion/
-    ├── health_daemon/
-    │   ├── README.md
-    │   └── healthd.c
-    └── vision/
-        ├── README.md
-        ├── camera.py
-        ├── config.py
-        ├── demo.png
-        ├── main.py
-        ├── mavlink.py
-        ├── ransac_worker.py
-        ├── renderer.py
-        ├── segmentation.py
-        ├── shared_state.py
-        ├── vision_app.py
-        └── yolo_worker.py
+├── companion/
+│   ├── health_daemon/
+│   │   ├── README.md
+│   │   └── healthd.c
+│   └── vision/
+│       ├── README.md
+│       ├── camera.py
+│       ├── config.py
+│       ├── demo.png
+│       ├── main.py
+│       ├── mavlink.py
+│       ├── ransac_worker.py
+│       ├── renderer.py
+│       ├── segmentation.py
+│       ├── shared_state.py
+│       ├── vision_app.py
+│       └── yolo_worker.py
+└── firmware/
+    └── embedded firmware for onboard drone hardware
 ```
 
 ## System overview
@@ -47,11 +50,11 @@ flowchart LR
 
     Client["Local TCP client<br/>nc / test script"] --> HealthD["Health daemon<br/>C / Linux"]
     HealthD --> Linux["/proc/uptime<br/>daemon health"]
-    HealthD -->|UART @ 115200| MCU["Payload MCU"]
-    MCU --> Payload["Payload release mechanism"]
+    HealthD -->|UART @ 115200| PayloadFirmware["Payload firmware<br/>firmware/"]
+    PayloadFirmware --> Payload["Payload release mechanism"]
 ```
 
-The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding.
+The onboard software is split between the companion computer and embedded firmware targets. The companion computer is responsible for higher-level mission support services. The vision stack processes synchronized color/depth frames and uses MAVLink attitude data to support plane estimation. The health daemon provides a small localhost control surface for payload-command testing and UART forwarding. The `firmware/` folder contains the embedded-side code that runs on onboard hardware such as the payload subsystem.
 
 ## `companion/vision`
 
@@ -87,6 +90,20 @@ Current capabilities:
 - Handles `SIGINT` and `SIGTERM` for clean shutdown
 
 See [`companion/health_daemon/README.md`](companion/health_daemon/README.md) for build instructions, command references, and simulation examples.
+
+## `firmware/`
+
+Embedded firmware for onboard drone hardware, including payload-side logic that works with the companion-computer health daemon.
+
+Current role:
+
+- Runs on embedded hardware separate from the companion computer
+- Handles low-level payload-subsystem behavior close to the actuator/sensor hardware
+- Communicates with the Linux health daemon over a serial/UART-style interface
+- Complements the daemon's `SIM_*` commands, which are for daemon-only bench testing
+- Keeps payload-control firmware separate from higher-level companion-computer services
+
+This firmware is separate from the flight-controller stack. Flight control, stabilization, and autopilot behavior remain the responsibility of the flight controller and its firmware/software stack.
 
 ## Quick start
 
@@ -131,9 +148,15 @@ SIM_LOCK
 EXIT
 ```
 
+### Firmware
+
+Use the files under `firmware/` for embedded-side payload or onboard-hardware development. Build and flash steps depend on the specific MCU/toolchain used by that firmware target.
+
 ## Development notes
 
-- The repository is organized around small onboard services rather than one monolithic drone application.
+- The repository is organized around small onboard services and embedded firmware modules rather than one monolithic drone application.
+- The companion-computer services live under `companion/`.
+- Embedded-side firmware lives under `firmware/`.
 - The health daemon can be tested without the payload MCU by using `SIM_*` commands.
 - Hardware-backed health-daemon commands require the configured serial device to exist and the MCU firmware to respond over UART.
 - The vision pipeline currently assumes a live Orbbec camera, a YOLO model path, and a MAVLink attitude source.
@@ -142,4 +165,4 @@ EXIT
 
 ## Project context
 
-This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, landmark-distance estimation, payload-control testing, and companion-computer health monitoring.
+This project was developed as part of McMaster Aerial Drones & Robotics work for the AEAC Fire Reconnaissance UAS competition. The onboard software supports mission-level capabilities such as target detection, depth-based estimation, landmark-distance estimation, payload-control testing, embedded payload firmware, and companion-computer health monitoring.
