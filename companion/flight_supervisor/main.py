@@ -4,14 +4,34 @@ import time
 from math import sqrt
 import argparse
 import sys
+import threading
 
 POSITION_ONLY = 0b110111111000
 VELOCITY_ONLY = 0b110111000111
 GUIDED = 4
 
+class DroneState:
+    def __init__(self):
+        self.heartbeat_received = False
+        self.mode_guided = True
+        self.armed = False
+        self.relative_alt = 0
+        self.vx = 0
+        self.vy = 0
+        self.vz = 0
+        self.battery_low = False
+        self.position_lost = False
+        self.landed = False
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.system_fault = 0
+
+drone = DroneState()
 parser = argparse.ArgumentParser()
 # 2. Define positional parameters (Required by default)
-parser.add_argument("port", type=str, help="Physical/IP port")
+parser.add_argument("--drone", type=str, help="Physical/IP port")
+parser.add_argument("--serial", type=str, help="Physical/IP port")
 args = parser.parse_args()
 
 def send_command(cmd, p1=0, p2=0, p3=0, p4=0, p5=0, p6=0, p7=0):
@@ -64,7 +84,6 @@ def set_local_position(bitmask, north, east, down, vel, accel, yaw):
     )
     return True
     
-
 def reached_position(north, east, down, x, y, z, tolerance=1):
     distance = sqrt((north - x) ** 2 + (east - y) ** 2 + (down - z) ** 2)
     return distance <= tolerance
@@ -74,13 +93,7 @@ def goto_local_ned(north, east, down, timeout, tolerance=1):
     set_local_position(POSITION_ONLY, north, east, down, (0, 0, 0), (0, 0, 0), (0, 0))
     start_time = time.time()
     while time.time() - start_time <= timeout:
-        distance = conn.recv_match(type="LOCAL_POSITION_NED", blocking=True, timeout=2)
-        if distance is None:
-            continue
-        x = distance.x
-        y = distance.y
-        z = distance.z
-        if reached_position(north, east, down, x, y, z, tolerance):
+        if reached_position(north, east, down, drone.x, drone.y, drone.z, tolerance):
             return True
     return False
 
@@ -153,10 +166,7 @@ def arm(timeout):
     while True:
         if time.time() - start_time >= timeout:
             return False
-        heartbeat = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
-        if heartbeat is None:
-            return False
-        if heartbeat.base_mode & 0b10000000 == 0b10000000:
+        if drone.armed:
             return True
         time.sleep(0.2)
 
@@ -165,65 +175,56 @@ def disarm(timeout):
     if not cmd_accepted:
         return False
     start_time = time.time()
-    while True:
-        if time.time() - start_time >= timeout:
-            return False
-        heartbeat = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
-        if heartbeat is None:
-            return False
-        if heartbeat.base_mode & 0b10000000 != 0b10000000:
+    while time.time() - start_time <= timeout:
+        if not drone.armed:
             return True
         time.sleep(0.2)
+    return False
 
 def takeoff(altitude, timeout, tolerance=1):
     cmd_accepted = send_command(mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, p7=altitude) == 0
     if not cmd_accepted:
         return False
     start_time = time.time()
-    while True:
-        if time.time() - start_time >= timeout:
-            return False
-        msg = conn.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=2.0)
-        if msg:
-            curr_altitude = msg.relative_alt / 1000
-            if abs(altitude - curr_altitude) <= tolerance:
-                return True
+    while time.time() - start_time <= timeout:
+        if abs(drone.relative_alt - altitude) <= tolerance:
+            return True
         time.sleep(0.2)
+    return False
     
 def land(timeout):
     cmd_accepted = send_command(mavutil.mavlink.MAV_CMD_NAV_LAND) == 0
     if not cmd_accepted:
         return False
     start_time = time.time()
-    while True:
-        if time.time() - start_time >= timeout:
-            return False
-        msg = conn.recv_match(type='EXTENDED_SYS_STATE', blocking=True, timeout=2.0)
-        if msg:
-            if msg.landed_state == mavutil.mavlink.MAV_LANDED_STATE_ON_GROUND: 
-                return True
+    while time.time() - start_time <= timeout:
+        if drone.landed:
+            return True
         time.sleep(0.2)
+    return False
 
 def wait_for_guided(timeout):
     start_time = time.time()
     while time.time() - start_time <= timeout:
         conn.wait_heartbeat()
-        heartbeat = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
-        if heartbeat.custom_mode == GUIDED:
+        if drone.mode_guided == True:
             return True
         time.sleep(0.2)
     return False
 
-conn = mavutil.mavlink_connection(args.port)
-ser = None
+drone_conn = args.drone or "udp:127.0.0.1:14550"
+conn = mavutil.mavlink_connection(drone_conn)
 
+ser = None
 try:
-    ser = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=3)
+    port = args.serial
+    if port is not None:
+        ser = serial.Serial(port=port, baudrate=115200, timeout=3)
 except:
     print("No serial connection")
 time.sleep(2)
 
-def run():
+def main():
     conn.wait_heartbeat()
     conn.set_mode("GUIDED")
     error_handle(wait_for_guided, 10)
@@ -234,4 +235,74 @@ def run():
     error_handle(absolute_motion, 0.5, 0.2, 0, 4)
     error_handle(land, 45)
 
-run()
+def supervise():
+    while 1:
+        msg = conn.recv_match(type='GPS_RAW_INT', blocking=True, timeout=2.0)
+        if msg is None:
+            drone.position_lost = None
+        else:
+            drone.position_lost = msg.h_acc >= 3000
+        msg = conn.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=2.0)
+        if msg is None:
+            drone.relative_alt = None
+            drone.vx = None
+            drone.vy = None
+            drone.vz = None
+        else:
+            drone.relative_alt = msg.relative_alt / 1000.0
+            drone.vx = msg.vx / 100.0
+            drone.vy = msg.vy / 100.0
+            drone.vz = msg.vz / 100.0
+        msg = conn.recv_match(type='LOCAL_POSITION_NED', blocking=True, timeout=2.0)
+        if msg is None:
+            drone.x = None
+            drone.y = None
+            drone.z = None
+        else:
+            drone.x = msg.x
+            drone.y = msg.y
+            drone.z = msg.z
+        msg = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
+        if msg is None:
+            drone.heartbeat_received = None
+            drone.mode_guided = None
+            drone.armed = None
+        else:
+            drone.heartbeat_received = True
+            drone.mode_guided = msg.custom_mode == GUIDED
+            drone.armed = msg.base_mode == 128
+        msg = conn.recv_match(type="EXTENDED_SYS_STATE", blocking=True, timeout=2.0)
+        if msg is None:
+            drone.landed = None
+        else:
+            drone.landed = msg.landed_state == 1 
+        msg = conn.recv_match(type="SYS_STATUS", blocking=True, timeout=2.0)
+        if msg is None:
+            drone.battery_low = None
+        else:
+            drone.battery_low = msg.battery_remaining < 30
+
+        if not drone.heartbeat_received:
+            drone.system_fault |= (0b1 << 0)
+        else:
+            drone.system_fault &= ~(0b1 << 0)
+        if not drone.mode_guided:
+            drone.system_fault |= (0b1 << 1)
+        else:
+            drone.system_fault &= ~(0b1 << 1)
+        if not drone.armed:
+            drone.system_fault |= (0b1 << 2)
+        else:
+            drone.system_fault &= ~(0b1 << 2)
+        if drone.battery_low:
+            drone.system_fault |= (0b1 << 7)
+        else:
+            drone.system_fault &= ~(0b1 << 7)
+        if drone.position_lost:
+            drone.system_fault |= (0b1 << 8)
+        else:
+            drone.system_fault &= ~(0b1 << 8)
+        time.sleep(0.2)
+
+threading.Thread(target=main).start()
+threading.Thread(target=supervise).start()
