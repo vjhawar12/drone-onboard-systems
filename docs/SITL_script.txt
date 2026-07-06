@@ -1,0 +1,8 @@
+sim_vehicle SITL creates a TCP server on 127.0.0.1:5760
+MavProxy connects to 127.0.0.1:5760 and forwards data stream to udp:127.0.0.1:14550
+The python flight supervisor script receives the data stream on udp:127.0.0.1:14550
+
+Run in this order:
+sim_vehicle.py -v ArduCopter --no-mavproxy
+mavproxy.py --master=tcp:127.0.0.1:5760 --out=udp:127.0.0.1:14550 --map --console
+

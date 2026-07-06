@@ -7,6 +7,7 @@ import sys
 
 POSITION_ONLY = 0b110111111000
 VELOCITY_ONLY = 0b110111000111
+GUIDED = 4
 
 parser = argparse.ArgumentParser()
 # 2. Define positional parameters (Required by default)
@@ -68,13 +69,14 @@ def reached_position(north, east, down, x, y, z, tolerance=1):
     distance = sqrt((north - x) ** 2 + (east - y) ** 2 + (down - z) ** 2)
     return distance <= tolerance
 
+# negative value for down = positive altitude
 def goto_local_ned(north, east, down, timeout, tolerance=1):
     set_local_position(POSITION_ONLY, north, east, down, (0, 0, 0), (0, 0, 0), (0, 0))
     start_time = time.time()
     while time.time() - start_time <= timeout:
         distance = conn.recv_match(type="LOCAL_POSITION_NED", blocking=True, timeout=2)
         if distance is None:
-            return False
+            continue
         x = distance.x
         y = distance.y
         z = distance.z
@@ -138,7 +140,8 @@ def absolute_motion(v_north, v_east, v_down, duration):
 def error_handle(foo, *args):
     if foo(*args) == False:
         print(f"Error: {foo.__name__} failed")
-        ser.write(f"Error: {foo.__name__} failed")
+        if ser and ser.is_open:
+            ser.write(f"Error: {foo.__name__} failed")
         land(30)
         sys.exit()
 
@@ -206,24 +209,29 @@ def wait_for_guided(timeout):
     while time.time() - start_time <= timeout:
         conn.wait_heartbeat()
         heartbeat = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
-        if heartbeat.custom_mode == 4:
+        if heartbeat.custom_mode == GUIDED:
             return True
         time.sleep(0.2)
     return False
 
 conn = mavutil.mavlink_connection(args.port)
-ser = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=3)
+ser = None
+
+try:
+    ser = serial.Serial(port="/dev/ttyACM0", baudrate=115200, timeout=3)
+except:
+    print("No serial connection")
 time.sleep(2)
 
 def run():
     conn.wait_heartbeat()
     conn.set_mode("GUIDED")
-    error_handle(wait_for_guided, 2)
-    error_handle(arm, 2)
-    error_handle(takeoff, 10, 30, 1)
-    error_handle(goto_local_ned, 5, 4, -2, 2)
+    error_handle(wait_for_guided, 10)
+    error_handle(arm, 10)
+    error_handle(takeoff, 10, 60, 1)
+    error_handle(goto_local_ned, 5, 4, -10, 20)
     error_handle(relative_motion, 0.5, 0, 0, 2)
     error_handle(absolute_motion, 0.5, 0.2, 0, 4)
-    error_handle(land, 5)
+    error_handle(land, 45)
 
 run()
