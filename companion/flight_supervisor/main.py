@@ -5,7 +5,11 @@ from math import sqrt
 import argparse
 import sys
 import threading
-from dataclasses import dataclass 
+from enum import Enum, IntEnum, IntFlag
+
+start_blocked = False
+action_aborted = False
+emergency_abort = False
 
 POSITION_ONLY = (
     mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE |
@@ -33,19 +37,46 @@ NONE = 0
 GUIDED = 4
 TIMEOUT = 3.0
 
-@dataclass
-class Fault:
+class Fault(IntFlag):
     STALE_HEARTBEAT = 0x1
     STALE_POSITION_LOST = 0x2
-    STALE_GLOBAL_VELOCITY = 0x3
-    STALE_LOCAL_POSITION = 0x4
-    STALE_LANDED = 0x5
-    STALE_BATTERY_LOW = 0x6
-    FAULT_POSITION_LOST = 0x7
-    FAULT_BATTERY_LOW = 0x8
-    FAULT_DISARMED = 0x9
-    FAULT_NOT_GUIDED = 0xA
+    STALE_GLOBAL_VELOCITY = 0x4
+    STALE_LOCAL_POSITION = 0x8
+    STALE_LANDED = 0x10
+    STALE_BATTERY_LOW = 0x20 
+    FAULT_POSITION_LOST = 0x40
+    FAULT_BATTERY_LOW = 0x80
+    FAULT_DISARMED = 0x100
+    FAULT_NOT_GUIDED = 0x200
 
+CRITICAL_FAULTS = (
+    Fault.STALE_HEARTBEAT, Fault.FAULT_BATTERY_LOW, Fault.FAULT_POSITION_LOST
+)
+
+class FaultHandler(IntEnum):
+    LOG_ONLY = 0
+    WARN_ONLY = 1
+    BLOCK_START = 2
+    ABORT_ACTION = 3
+    STOP_MOTION = 4
+    HOLD_POSITION = 5
+    LAND_NOW = 6
+    RETURN_TO_BASE = 7
+    OPERATOR_HANDOFF = 8
+    EMERGENCY_ABORT = 9
+
+FaultPolicy = {
+    Fault.STALE_HEARTBEAT : FaultHandler.EMERGENCY_ABORT,
+    Fault.STALE_POSITION_LOST : FaultHandler.WARN_ONLY,
+    Fault.STALE_BATTERY_LOW : FaultHandler.WARN_ONLY,
+    Fault.STALE_LANDED : FaultHandler.WARN_ONLY,
+    Fault.STALE_LOCAL_POSITION : FaultHandler.ABORT_ACTION,
+    Fault.STALE_GLOBAL_VELOCITY : FaultHandler.LOG_ONLY,
+    Fault.FAULT_BATTERY_LOW : FaultHandler.RETURN_TO_BASE,
+    Fault.FAULT_POSITION_LOST : FaultHandler.LAND_NOW,
+    Fault.FAULT_NOT_GUIDED : FaultHandler.OPERATOR_HANDOFF,
+    Fault.FAULT_DISARMED : FaultHandler.EMERGENCY_ABORT,
+}
 
 class DroneState:
     def __init__(self):
@@ -69,10 +100,15 @@ class DroneState:
         self.x = 0
         self.y = 0
         self.z = 0
+        self.homex = 0
+        self.homey = 0
+        self.homez = 0
+        self.homelat = 0
+        self.homelon = 0
+        self.homealt = 0
         self.position_timestamp = 0
-        self.system_fault = 0
+        self.system_fault = Fault(0)
         self.commands = dict()
-
 
 drone = DroneState()
 parser = argparse.ArgumentParser()
@@ -136,8 +172,20 @@ def reached_position(north, east, down, x, y, z, tolerance=1):
 
 # negative value for down = positive altitude
 def goto_local_ned(north, east, down, timeout, tolerance=1):
+    priority_list = (
+        Fault.FAULT_DISARMED,
+        Fault.STALE_HEARTBEAT,
+        Fault.FAULT_POSITION_LOST,
+        Fault.FAULT_BATTERY_LOW,
+        Fault.FAULT_NOT_GUIDED,
+        Fault.STALE_LOCAL_POSITION,
+        Fault.STALE_POSITION_LOST,
+        Fault.STALE_BATTERY_LOW,
+        Fault.STALE_GLOBAL_VELOCITY,
+        )
     start_time = time.time()
     while time.time() - start_time <= timeout:
+        error_handle(priority_list)
         set_local_position(POSITION_ONLY, north, east, down, (0, 0, 0), (0, 0, 0), (0, 0))
         if reached_position(north, east, down, drone.x, drone.y, drone.z, tolerance):
             return True
@@ -159,20 +207,16 @@ def stop():
     conn.mav.send(msg)
     return True
 
-def return_to_base():
-    msg = conn.mav.set_position_target_local_ned_encode(
-            time_boot_ms=0,
-            target_system=conn.target_system,
-            target_component=conn.target_component,
-            coordinate_frame=mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH,  
-            type_mask=0,           
-            x=0.0, y=0.0, z=0.0,      
-            vx=0, vy=0, vz=0, 
-            afx=0.0, afy=0.0, afz=0.0,
-            yaw=0.0, yaw_rate=0.0     
-        )
-    conn.mav.send(msg)
-    return True
+def return_to_base(timeout=180, tolerance=1):
+    command_accepted = send_command(mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH) == 0
+    if not command_accepted:
+        return False
+    start_time = time.time()
+    while time.time() - start_time <= timeout:
+        if reached_position(drone.homex, drone.homey, drone.homez, drone.x, drone.y, drone.z, tolerance):
+            return True
+        time.sleep(0.2)
+    return False
 
 def relative_motion(vx, vy, vz, duration):
     start = time.time()
@@ -212,34 +256,70 @@ def absolute_motion(v_north, v_east, v_down, duration):
     stop()
     return True
 
-def error_write(string):
+def log(string):
     print(string)
     if ser and ser.is_open:
         ser.write(string.encode())
 
 def ERROR(foo, *args):
     if foo(*args) == False:
-        error_write(f"Error: Function {foo.__name__} failed")
-        if foo.name != land.__name__:
+        log(f"Error: Function {foo.__name__} failed")
+        if foo.__name__ != land.__name__:
             land(30)
         sys.exit()
 
+def handle_faults(fault, log_only=True):
+    global start_blocked, action_aborted, emergency_abort
+    match fault:
+        case FaultHandler.LOG_ONLY:
+            log(f"[{time.time()}] LOG {fault}")
+        case FaultHandler.WARN_ONLY:
+            log(f"[{time.time()}] WARN {fault}")
+        case FaultHandler.BLOCK_START:
+            log(f"[{time.time()}] Takeoff blocked")
+            if not log_only:
+                start_blocked = True
+        case FaultHandler.ABORT_ACTION:
+            log(f"[{time.time()}] Aborting action")
+            if not log_only:
+                action_aborted = True
+        case FaultHandler.STOP_MOTION:
+            log(f"[{time.time()}] Stopping motion")
+            if not log_only:
+                stop()
+        case FaultHandler.HOLD_POSITION:
+            log(f"[{time.time()}] Holding position")
+            if not log_only:
+                stop()
+        case FaultHandler.LAND_NOW:
+            log(f"[{time.time()}] Landing at immediate location x: {drone.x} y: {drone.y} z: {drone.z}")
+            if not log_only:
+                land(30)
+        case FaultHandler.RETURN_TO_BASE:
+            log(f"[{time.time()}] Returning to base at x: {drone.homex} y: {drone.homey} z: {drone.homez}")
+            if not log_only:
+                return_to_base()
+        case FaultHandler.OPERATOR_HANDOFF:
+            log(f"[{time.time()}] Exiting autonomous control; operator taking over")
+            if not log_only:
+                stop()
+        case FaultHandler.EMERGENCY_ABORT:
+            log(f"[{time.time()}] EMERGENCY ABORT")
+            if not log_only:
+                emergency_abort = True
 
-# provide bitmask with conditions arranged by severity from LSB to MSB
-def error_handle(bitmask, num_conditions):
-    top_condition = bitmask & (0xF << (4 * (num_conditions - 1)))
-    if top_condition & Fault.STALE_HEARTBEAT:
-        error_write("STALE HEARTBEAT")
-        land(30)
-    elif top_condition & Fault.STALE_POSITION_LOST:
-        error_write("STALE POSITION LOST")
-    elif top_condition & Fault.STALE_GLOBAL_VELOCITY:
-        error_write("STALE GLOBAL VELOCITY")
+# provide list with faults arranged by severity from LSB to MSB
+def error_handle(priority_list):          
+    faults = [fault for fault in priority_list if fault & drone.system_fault]
+    if len(faults) == 0:
+        return True
+    i = 0
+    for fault in faults:
+        handle_faults(FaultPolicy[fault], i > 0)
+        i += 1
+    if FaultPolicy[faults[0]] <= FaultHandler.WARN_ONLY:
+        return False
    
-    
-        
-
-
 def arm(timeout):
     cmd_accepted = send_command(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=1) == 0
     if not cmd_accepted:
@@ -303,7 +383,7 @@ def supervise():
         "HEARTBEAT",
         "EXTENDED_SYS_STATE",
         "SYS_STATUS",
-        "COMMAND_ACK"   
+        "COMMAND_ACK",
     ]
     while 1:
         current_time = time.time()
@@ -363,7 +443,7 @@ def supervise():
                 drone.system_fault |= Fault.STALE_BATTERY_LOW
         else:
             drone.system_fault &= ~(Fault.FAULT_BATTERY_LOW | Fault.STALE_BATTERY_LOW)
-        if current_time - drone.unknown_position_timer > TIMEOUT:
+        if drone.position_lost and current_time - drone.unknown_position_timer > TIMEOUT:
             # lost position
             drone.system_fault |= Fault.FAULT_POSITION_LOST
         else:
@@ -379,16 +459,6 @@ def supervise():
         time.sleep(0.2)
 
 
-handler = {}
-handler[Fault.STALE_HEARTBEAT] = [(stop, "Warning: STALE HEARTBEAT; Heartbeat not received recently")]
-handler[Fault.STALE_BATTERY_LOW] = [(error_write, "Warning: STALE BATTERY; Battery level not fetched recently")]
-handler[Fault.STALE_GLOBAL_VELOCITY] = stop
-handler[Fault.STALE_LANDED] = stop
-handler[Fault.STALE_LOCAL_POSITION] = stop
-handler[Fault.STALE_POSITION_LOST] = land
-handler[Fault.FAULT_BATTERY_LOW] = return_to_base
-
-
 drone_conn = args.drone or "udp:127.0.0.1:14550"
 conn = mavutil.mavlink_connection(drone_conn)
 ser = None
@@ -399,6 +469,11 @@ try:
 except:
     print("No serial connection")
 time.sleep(2)
+msg = conn.recv_match(type="HOME_POSITION", blocking=True, timeout=2.0)
+if msg is not None and msg.get_type() == "HOME_POSITION":
+    drone.homex, drone.homey, drone.homez = msg.x, msg.y, msg.z
+    drone.homelat, drone.homelon, drone.homealt = msg.latitude, msg.longitude, msg.altitude
+
 threading.Thread(target=supervise).start()
 
 def main():
