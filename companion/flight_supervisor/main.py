@@ -185,7 +185,8 @@ def goto_local_ned(north, east, down, timeout, tolerance=1):
         )
     start_time = time.time()
     while time.time() - start_time <= timeout:
-        error_handle(priority_list)
+        if error_handle(priority_list) == False:
+            return False
         set_local_position(POSITION_ONLY, north, east, down, (0, 0, 0), (0, 0, 0), (0, 0))
         if reached_position(north, east, down, drone.x, drone.y, drone.z, tolerance):
             return True
@@ -233,6 +234,15 @@ def relative_motion(vx, vy, vz, duration):
             yaw=0.0, yaw_rate=0.0     
         )
         conn.mav.send(msg)
+        if error_handle([
+            Fault.FAULT_DISARMED,
+            Fault.STALE_HEARTBEAT,
+            Fault.FAULT_NOT_GUIDED,
+            Fault.FAULT_POSITION_LOST,
+            Fault.FAULT_BATTERY_LOW,
+            Fault.STALE_GLOBAL_VELOCITY,
+        ]) == False:
+            return False
         time.sleep(0.2)
     stop()
     return True
@@ -252,6 +262,15 @@ def absolute_motion(v_north, v_east, v_down, duration):
             yaw=0.0, yaw_rate=0.0     
         )
         conn.mav.send(msg)
+        if error_handle([
+            Fault.STALE_HEARTBEAT,
+            Fault.FAULT_DISARMED,
+            Fault.FAULT_NOT_GUIDED,
+            Fault.FAULT_POSITION_LOST,
+            Fault.FAULT_BATTERY_LOW,
+            Fault.STALE_GLOBAL_VELOCITY,
+        ]) == False:
+            return False
         time.sleep(0.2)
     stop()
     return True
@@ -264,8 +283,6 @@ def log(string):
 def ERROR(foo, *args):
     if foo(*args) == False:
         log(f"Error: Function {foo.__name__} failed")
-        if foo.__name__ != land.__name__:
-            land(30)
         sys.exit()
 
 def handle_faults(fault, log_only=True):
@@ -292,14 +309,17 @@ def handle_faults(fault, log_only=True):
             if not log_only:
                 stop()
         case FaultHandler.LAND_NOW:
+            action_aborted = True
             log(f"[{time.time()}] Landing at immediate location x: {drone.x} y: {drone.y} z: {drone.z}")
             if not log_only:
                 land(30)
         case FaultHandler.RETURN_TO_BASE:
+            action_aborted = True
             log(f"[{time.time()}] Returning to base at x: {drone.homex} y: {drone.homey} z: {drone.homez}")
             if not log_only:
                 return_to_base()
         case FaultHandler.OPERATOR_HANDOFF:
+            action_aborted = True
             log(f"[{time.time()}] Exiting autonomous control; operator taking over")
             if not log_only:
                 stop()
@@ -308,7 +328,7 @@ def handle_faults(fault, log_only=True):
             if not log_only:
                 emergency_abort = True
 
-# provide list with faults arranged by severity from LSB to MSB
+# priority list: most severe -> least severe
 def error_handle(priority_list):          
     faults = [fault for fault in priority_list if fault & drone.system_fault]
     if len(faults) == 0:
@@ -317,8 +337,7 @@ def error_handle(priority_list):
     for fault in faults:
         handle_faults(FaultPolicy[fault], i > 0)
         i += 1
-    if FaultPolicy[faults[0]] <= FaultHandler.WARN_ONLY:
-        return False
+    return FaultPolicy[faults[0]] <= FaultHandler.WARN_ONLY
    
 def arm(timeout):
     cmd_accepted = send_command(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=1) == 0
@@ -351,6 +370,14 @@ def takeoff(altitude, timeout, tolerance=1):
     while time.time() - start_time <= timeout:
         if abs(drone.relative_alt - altitude) <= tolerance:
             return True
+        if error_handle([
+            Fault.FAULT_DISARMED,
+            Fault.STALE_HEARTBEAT,
+            Fault.FAULT_NOT_GUIDED,
+            Fault.FAULT_BATTERY_LOW,
+            Fault.STALE_BATTERY_LOW,
+        ]) == False:
+            return False
         time.sleep(0.2)
     return False
     
@@ -360,8 +387,8 @@ def land(timeout):
         return False
     start_time = time.time()
     while time.time() - start_time <= timeout:
-        if drone.system_fault & Fault.STALE_LANDED > 0:
-           pass
+        if error_handle([Fault.STALE_LANDED, Fault.STALE_HEARTBEAT]) == False:
+            return False
         if drone.landed:
             return True
         time.sleep(0.2)
