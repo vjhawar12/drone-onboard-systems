@@ -34,9 +34,9 @@ This repository covers software that runs on the drone outside the flight-contro
 │       └── yolo_worker.py
 └── firmware/
     └── payload-release-stm32/
-        ├── README.md
-        ├── architecture_diagram.png
-        └── STM32 payload-release firmware project files
+        ├── README.md                # Firmware overview, UART protocol, FSM, and safety notes
+        ├── architecture_diagram.png # Payload release state-machine diagram
+        └── STM32 project files      # UART parsing, non-blocking FSM, servo timing, and fault handling
 ```
 
 ## System overview
