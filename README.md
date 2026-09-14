@@ -99,7 +99,7 @@ Current capabilities include:
 - Reads MAVLink `ATTITUDE` messages and stores pitch/roll for RANSAC
 - Displays a live OpenCV feed with target/landmark annotations
 
-See [`companion/vision/README.md`](companion/vision/README.md) for dependencies, configuration, and current integration caveats.
+See [`companion/vision/README.md`](companion/vision/README.md) for a **video demo**, dependencies, configuration, and current integration caveats.
 
 ## `companion/health_daemon`
 
