@@ -1,0 +1,4 @@
+firmware/payload-release-stm32/Drivers
+firmware/payload-release-stm32/build
+firmware/payload-release-stm32/.vscode
+firmware/payload-release-stm32/.settings
