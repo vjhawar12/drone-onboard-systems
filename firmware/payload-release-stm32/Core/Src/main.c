@@ -50,7 +50,7 @@ typedef enum PayloadState {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define LEN 4
+#define LEN 5
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -147,23 +147,22 @@ int main(void)
     // execute the command via dispatch table
     char_ready = read_character(&character); 
     if (char_ready && character != 0) {
-      if (idx <= LEN - 1) {
-        cmd[idx++] = character;
-        if (idx == LEN) {
-          if (!strncmp((const char*)cmd, "LOCK", 4)) {
-            rx_armed = false;
-            rx_releasing = false;
-          } else if (!strncmp((const char*)cmd, "ARMD", 4)) {
-            rx_armed = true;
-            rx_releasing = false;
-          } else if (!strncmp((const char*)cmd, "RELS", 4)) {
-            rx_releasing = true;
-            rx_armed = false;
-          } else {
-            rx_armed = false;
-            rx_releasing = false;
-          }
+      if (character == '\n') {
+        if (!strcmp((const char*)cmd, "LOCK\n")) {
+          rx_armed = false;
+          rx_releasing = false;
+        } else if (!strcmp((const char*)cmd, "ARMD\n")) {
+          rx_armed = true;
+          rx_releasing = false;
+        } else if (!strcmp((const char*)cmd, "RELS\n")) {
+          rx_releasing = true;
+          rx_armed = false;
+        } else {
+          rx_armed = false;
+          rx_releasing = false;
         }
+      } else if (idx <= LEN - 1) {
+        cmd[idx++] = character;
       } else {
         idx = 0; 
       }
