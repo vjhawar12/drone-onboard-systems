@@ -17,6 +17,7 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include "system_stm32g0xx.h"
 #define _GNU_SOURCE
 #include "main.h"
 
@@ -69,11 +70,23 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+uint32_t ticks_ms;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void SysTick_Init() {
+  SysTick->CTRL = 0; // Disable SysTick
+  SysTick->LOAD = (SystemCoreClock / 1000) - 1;  // Set reload for 1-second interval (at 16 MHz)
+  SysTick->VAL  = 0; // Clear current value and flag
+  // Enable counter, interrupt, and CPU clock
+  SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_CLKSOURCE_Msk; 
+}
+
+void SysTick_Handler() {
+  ticks_ms++;
+}
+
 
 /* USER CODE END 0 */
 
@@ -95,7 +108,7 @@ int main(void)
   bool retr_started;
   bool rels_finished;
   bool retr_finished;
-  struct timespec ts_rels, ts_retr;
+  bool char_ready; 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -138,18 +151,18 @@ int main(void)
     // if valid character add it to cmd array
     // check if character array is a valid command
     // execute the command via dispatch table
-    read_character(&character); 
-    if (character != 0 && (character == '\r' || character == '\n')) {
-      if (idx < LEN - 1) {
+    char_ready = read_character(&character); 
+    if (char_ready && character != 0) {
+      if (idx <= LEN - 1) {
         cmd[idx++] = character;
         if (idx == LEN) {
-          if (!strncmp(cmd, "LOCK", 4)) {
+          if (!strncmp((const char*)cmd, "LOCK", 4)) {
             rx_armed = false;
             rx_releasing = false;
-          } else if (!strncmp(cmd, "ARMD", 4)) {
+          } else if (!strncmp((const char*)cmd, "ARMD", 4)) {
             rx_armed = true;
             rx_releasing = false;
-          } else if (!strncmp(cmd, "RELS", 4)) {
+          } else if (!strncmp((const char*)cmd, "RELS", 4)) {
             rx_releasing = true;
             rx_armed = false;
           } else {
@@ -175,10 +188,9 @@ int main(void)
         break;
       case RELEASING:
         // wait release_ms then transition to retract
-        clock_gettime(&ts_rels, TIME_UTC);
-        rels_time = (long long)(ts_rels.tv_sec) * 1000 + (ts_rels.tv_nsec / 1000000);
+        rels_time = ticks_ms; 
         if (!rels_started) {
-          rels_start_ms = rels_time; 
+          rels_start_ms = ticks_ms; 
           rels_started = true;
           rels_finished = false;
         } else if (rels_time - rels_start_ms > RELEASE_MS) {
@@ -191,14 +203,12 @@ int main(void)
           rels_end_ms = 0;
           rels_time = 0;
           rels_started = false;
-          memset(&ts_rels, sizeof(ts_rels), 0); 
         }
         break;
       case RETRACTING:
-        timespec_get(&ts_retr, TIME_UTC);
-        retr_time = (long long)(ts_retr.tv_sec) * 1000 + (ts_retr.tv_nsec / 1000000);
+        retr_time = ticks_ms;
         if (!retr_started) {
-          retr_start_ms = retr_time; 
+          retr_start_ms = ticks_ms; 
           retr_started = true;
           retr_finished = false;
         } else if (retr_time - retr_start_ms > RETRACT_MS) {
@@ -211,7 +221,6 @@ int main(void)
           retr_end_ms = 0;
           retr_time = 0;
           retr_started = false;
-          memset(&ts_retr, sizeof(ts_retr), 0); 
         }
         break;
       default:
