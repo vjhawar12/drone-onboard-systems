@@ -70,9 +70,9 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-uint32_t ticks_ms;
+extern uint32_t ticks_ms;
 /* USER CODE END PFP */
-
+  
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void SysTick_Init() {
@@ -81,10 +81,6 @@ void SysTick_Init() {
   SysTick->VAL  = 0; // Clear current value and flag
   // Enable counter, interrupt, and CPU clock
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_CLKSOURCE_Msk; 
-}
-
-void SysTick_Handler() {
-  ticks_ms++;
 }
 
 

@@ -20,7 +20,8 @@
 // to pulse max for 180 deg and then to a fraction of ARR
 int servo_move_to(uint16_t degrees) {
     if (degrees < MAX_DEG) {
-        uint32_t ccr = CCR_MIN + (degrees / MAX_DEG) * (CCR_MIN / CCR_MAX); 
+        uint32_t ccr = CCR_MIN + ((float)degrees / MAX_DEG) * (CCR_MIN / CCR_MAX); 
+        TIM1->CCR1 = ccr;
         return 0; 
     } else {
         return 1; 

@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include "read_uart.h"
 
-void read_character(uint8_t *byte) {
-    *byte = LL_USART_ReceiveData8(USART1); 
+bool read_character(uint8_t *byte) {
+    if (LL_USART_IsActiveFlag_RXNE) {
+        *byte = LL_USART_ReceiveData8(USART1); 
+        return true;
+    }
+    return false;
 }

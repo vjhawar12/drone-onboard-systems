@@ -2,6 +2,8 @@
 #define READ_UART_H
 
 #include <stdint.h>
-void read_character(uint8_t *byte); 
+#include <stdbool.h>
+
+bool read_character(uint8_t *byte); 
 
 #endif
