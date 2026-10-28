@@ -82,8 +82,6 @@ void SysTick_Init() {
   // Enable counter, interrupt, and CPU clock
   SysTick->CTRL = SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk | SysTick_CTRL_CLKSOURCE_Msk; 
 }
-
-
 /* USER CODE END 0 */
 
 /**
@@ -128,7 +126,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  SysTick_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */

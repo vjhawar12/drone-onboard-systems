@@ -41,7 +41,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-uint32_t ticks_ms;
+volatile uint32_t ticks_ms;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
