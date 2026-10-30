@@ -17,6 +17,7 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <stdint.h>
 #include "system_stm32g0xx.h"
 #define _GNU_SOURCE
 #include "main.h"

@@ -1,3 +1,14 @@
 build
 mx.scratch
 !.settings
+cmake-build-*/
+Debug/
+Release/
+.vscode/
+.settings/
+*.swp
+*.swo
+*~
+Drivers/CMSIS/NN
+Drivers/CMSIS/RTOS
+Drivers/CMSIS/RTOS2
