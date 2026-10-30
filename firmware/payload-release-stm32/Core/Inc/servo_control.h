@@ -7,11 +7,11 @@
 
 // 20 ms period with 50 hz frequency
 
-#define MAX_DEG 180
-#define PERIOD_MS 20
-#define FREQ_HZ 50
-#define PW_MIN 1.0
-#define PW_MAX 2.0
+#define MAX_DEG 180U
+#define PERIOD_MS 20U
+#define FREQ_HZ 50U
+#define PW_MIN 1U
+#define PW_MAX 2U
 #define ARR (TIM1->ARR)
 #define DUTY_MIN (PW_MIN / PERIOD_MS)
 #define DUTY_MAX (PW_MAX / PERIOD_MS)
@@ -24,11 +24,13 @@
 // to pulse max for 180 deg and then to a fraction of ARR
 
 static inline int servo_move_to(uint16_t degrees) {
-    if (degrees < MAX_DEG) {
-        uint32_t ccr = CCR_MIN + (((float)degrees * (CCR_MAX - CCR_MIN)) / MAX_DEG); 
+    if (degrees <= MAX_DEG) {
+        // avoiding floating point math by adding half the denomenator to numerator before dividing
+        uint16_t ccr = CCR_MIN + ((degrees * (CCR_MAX - CCR_MIN + MAX_DEG/2)) / MAX_DEG); 
+        // TIM1 is a 16 bit timer with a 16 bit CCR1 register, despite the C definition being uint32_t
         TIM1->CCR1 = ccr;
         return 0; 
-    } else {
+    } else {    
         return 1; 
     }
 }

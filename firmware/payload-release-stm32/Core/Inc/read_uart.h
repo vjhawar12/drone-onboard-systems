@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "stm32g0b1xx.h"
 #include "stm32g0xx_ll_usart.h"
 

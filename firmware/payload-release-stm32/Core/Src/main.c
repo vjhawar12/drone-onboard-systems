@@ -148,76 +148,78 @@ int main(void)
     // check if character array is a valid command
     // execute the command via dispatch table
     char_ready = read_character(&character); 
-    if (char_ready && isalpha(char_ready) && character != 0) {
-      cmd[idx++] = character;
-      if (idx == MAX_CMD_LEN) {
-        idx = 0; 
-      } else if (idx == MAX_CMD_LEN) {
-        if (!strncmp((const char*)cmd, "LOCK", MAX_CMD_LEN)) {
-          rx_armed = false;
-          rx_releasing = false;
-        } else if (!strncmp((const char*)cmd, "ARMD", MAX_CMD_LEN)) {
-          rx_armed = true;
-          rx_releasing = false;
-        } else if (!strncmp((const char*)cmd, "RELS", MAX_CMD_LEN)) {
-          rx_releasing = true;
-          rx_armed = false;
-        } 
-      }
+    if (char_ready) {
+		if (!isalpha(character) || character == 0) {
+			// print debug message
+		}
+		cmd[idx++] = character;
+		if (idx == MAX_CMD_LEN) {
+			idx = 0; 
+			if (!strncmp((const char*)cmd, "LOCK", MAX_CMD_LEN)) {
+				rx_armed = false;
+				rx_releasing = false;
+			} else if (!strncmp((const char*)cmd, "ARMD", MAX_CMD_LEN)) {
+				rx_armed = true;
+				rx_releasing = false;
+			} else if (!strncmp((const char*)cmd, "RELS", MAX_CMD_LEN)) {
+				rx_releasing = true;
+				rx_armed = false;
+			} 
+		}
     }
     switch (state) {
-      case LOCKED:
-        if (rx_armed) {
-          state = ARMED;
-        }
-        break;
-      case ARMED:
-        if (rx_releasing) {
-          state = RELEASING;
-        }
-        break;
-      case RELEASING:
-        // wait release_ms then transition to retract
-        rels_time = ticks_ms; 
-        if (!rels_started) {
-          rels_start_ms = ticks_ms; 
-          rels_started = true;
-          rels_finished = false;
-          servo_release();
-        } else if (rels_time - rels_start_ms > RELEASE_MS) {
-          rels_finished = true;
-          rels_started = false;
-        }
-        if (rels_finished) {
-          state = RETRACTING;
-          rels_start_ms = 0; 
-          rels_end_ms = 0;
-          rels_time = 0;
-          rels_started = false;
-        }
-        break;
-      case RETRACTING:
-        retr_time = ticks_ms;
-        if (!retr_started) {
-          retr_start_ms = ticks_ms; 
-          retr_started = true;
-          retr_finished = false;
-          servo_retract(); 
-        } else if (retr_time - retr_start_ms > RETRACT_MS) {
-          retr_finished = true;
-          retr_started = false;
-        }
-        if (retr_finished) {
-          state = LOCKED;
-          retr_start_ms = 0; 
-          retr_end_ms = 0;
-          retr_time = 0;
-          retr_started = false;
-        }
-        break;
-      default:
-        break;
-    }
+		case LOCKED:
+			if (rx_armed) {
+				state = ARMED;
+			}
+			break;
+		case ARMED:
+			if (rx_releasing) {
+				state = RELEASING;
+			}
+			break;
+		case RELEASING:
+			// wait release_ms then transition to retract
+			rels_time = ticks_ms; 
+			if (!rels_started) {
+				rels_start_ms = ticks_ms; 
+				rels_started = true;
+				rels_finished = false;
+				servo_release();
+			} else if (rels_time - rels_start_ms > RELEASE_MS) {
+				rels_finished = true;
+				rels_started = false;
+			}
+			if (rels_finished) {
+				state = RETRACTING;
+				rels_start_ms = 0; 
+				rels_end_ms = 0;
+				rels_time = 0;
+				rels_started = false;
+			}
+			break;
+		case RETRACTING:
+			retr_time = ticks_ms;
+			if (!retr_started) {
+				retr_start_ms = ticks_ms; 
+				retr_started = true;
+				retr_finished = false;
+				servo_retract(); 
+			} else if (retr_time - retr_start_ms > RETRACT_MS) {
+				retr_finished = true;
+				retr_started = false;
+			}
+			if (retr_finished) {
+				state = LOCKED;
+				retr_start_ms = 0; 
+				retr_end_ms = 0;
+				retr_time = 0;
+				retr_started = false;
+			}
+			break;
+		default:
+			break;
+	}
   }
   /* USER CODE END WHILE */
 }
