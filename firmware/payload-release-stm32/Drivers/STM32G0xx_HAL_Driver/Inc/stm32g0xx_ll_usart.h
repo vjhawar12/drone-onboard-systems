@@ -1318,7 +1318,7 @@ __STATIC_INLINE void LL_USART_SetStopBitsLength(USART_TypeDef *USARTx, uint32_t 
   * @retval Returned value can be one of the following values:
   *         @arg @ref LL_USART_STOPBITS_0_5
   *         @arg @ref LL_USART_STOPBITS_1
-  *         @arg @ref LL_USART_STOPBITS_1_5
+  *         @arg @ref LL_USART_STOPBITS_1_5Transmit
   *         @arg @ref LL_USART_STOPBITS_2
   */
 __STATIC_INLINE uint32_t LL_USART_GetStopBitsLength(const USART_TypeDef *USARTx)

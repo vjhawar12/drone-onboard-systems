@@ -26,7 +26,7 @@
 static inline int servo_move_to(uint16_t degrees) {
     if (degrees <= MAX_DEG) {
         // avoiding floating point math by adding half the denomenator to numerator before dividing
-        uint16_t ccr = CCR_MIN + ((degrees * (CCR_MAX - CCR_MIN + MAX_DEG/2)) / MAX_DEG); 
+        uint16_t ccr = CCR_MIN + ((degrees * (CCR_MAX - CCR_MIN) + MAX_DEG/2) / MAX_DEG); 
         // TIM1 is a 16 bit timer with a 16 bit CCR1 register, despite the C definition being uint32_t
         TIM1->CCR1 = ccr;
         return 0; 

@@ -28,8 +28,9 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
-#include "read_uart.h"
+#include "uart.h"
 #include "servo_control.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,8 +62,6 @@ typedef enum PayloadState {
 static uint8_t character; 
 static uint8_t cmd[MAX_CMD_LEN];
 static uint8_t idx;   
-static bool rx_armed;
-static bool rx_releasing;
 static PayloadState state; 
 /* USER CODE END PV */
 
@@ -93,11 +92,8 @@ void SysTick_Init() {
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-  int ret;
   long long rels_start_ms; 
-  long long rels_end_ms;
   long long retr_start_ms; 
-  long long retr_end_ms;
   long long rels_time;
   long long retr_time; 
   bool rels_started = false;
@@ -150,33 +146,44 @@ int main(void)
     char_ready = read_character(&character); 
     if (char_ready) {
 		if (!isalpha(character) || character == 0) {
-			// print debug message
+			char msg[128]; 
+			snprintf(msg, sizeof(msg), "ERR invalid character '%c'\r\n", character);   
+			write_string((uint8_t*)msg, strlen(msg)); 
 		}
 		cmd[idx++] = character;
 		if (idx == MAX_CMD_LEN) {
 			idx = 0; 
 			if (!strncmp((const char*)cmd, "LOCK", MAX_CMD_LEN)) {
-				rx_armed = false;
-				rx_releasing = false;
+				state = LOCKED;
+				const char *msg = "OK LOCK\r\n";  
+				write_string((uint8_t*)msg, strlen(msg)); 
 			} else if (!strncmp((const char*)cmd, "ARMD", MAX_CMD_LEN)) {
-				rx_armed = true;
-				rx_releasing = false;
+				if (state == LOCKED) {
+					state = ARMED;
+					const char *msg = "OK ARMD\r\n";  
+					write_string((uint8_t*)msg, strlen(msg)); 
+				} else {
+					char msg[128]; 
+					snprintf(msg, sizeof(msg), "ERR cannot enter ARMD from %d\r\n", state);   
+					write_string((uint8_t*)msg, strlen(msg)); 
+				}
 			} else if (!strncmp((const char*)cmd, "RELS", MAX_CMD_LEN)) {
-				rx_releasing = true;
-				rx_armed = false;
+				if (state == ARMED) {
+					state = RELEASING;
+					const char *msg = "OK RELS\r\n";  
+					write_string((uint8_t*)msg, strlen(msg)); 
+				} else {
+					char msg[128]; 
+					snprintf(msg, sizeof(msg), "ERR cannot enter RELS from %d\r\n", state);   
+					write_string((uint8_t*)msg, strlen(msg)); 
+				}
 			} 
 		}
     }
     switch (state) {
 		case LOCKED:
-			if (rx_armed) {
-				state = ARMED;
-			}
 			break;
 		case ARMED:
-			if (rx_releasing) {
-				state = RELEASING;
-			}
 			break;
 		case RELEASING:
 			// wait release_ms then transition to retract
@@ -193,7 +200,6 @@ int main(void)
 			if (rels_finished) {
 				state = RETRACTING;
 				rels_start_ms = 0; 
-				rels_end_ms = 0;
 				rels_time = 0;
 				rels_started = false;
 			}
@@ -212,7 +218,6 @@ int main(void)
 			if (retr_finished) {
 				state = LOCKED;
 				retr_start_ms = 0; 
-				retr_end_ms = 0;
 				retr_time = 0;
 				retr_started = false;
 			}
