@@ -10,8 +10,8 @@
 #define MAX_DEG 180U
 #define PERIOD_MS 20U
 #define FREQ_HZ 50U
-#define PW_MIN 1U
-#define PW_MAX 2U
+#define PW_MIN 1.0
+#define PW_MAX 2.0
 #define ARR (TIM1->ARR)
 #define DUTY_MIN (PW_MIN / PERIOD_MS)
 #define DUTY_MAX (PW_MAX / PERIOD_MS)

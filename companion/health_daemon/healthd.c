@@ -257,7 +257,8 @@ int cmd_retract(char* buffer) {
 int send_mcu_command(char* command_buffer, const char* command) {
     char buffer[128] = {0};
     int err = 0;
-    snprintf(buffer, 128, "%s\n", command);
+    // optional: verify command_buffer contents before sending via uart_tx
+    snprintf(buffer, 128, "%s", command);
     err = uart_tx(buffer);
     if (err != 0) {
         snprintf(command_buffer, 384, "%s: Error with UART TX", command);
@@ -299,16 +300,16 @@ int handle_client(char* socket_buffer, int buffer_size, int client_fd) {
             send_mcu_command(command_buffer, "LOCK");
         } else if (strncmp("SIM_ARM", socket_buffer, 7) == 0) {
             err = cmd_arm(command_buffer);
-        } else if (strncmp("ARM", socket_buffer, 3) == 0) {
-            send_mcu_command(command_buffer, "ARM");
+        } else if (strncmp("ARMD", socket_buffer, 3) == 0) {
+            send_mcu_command(command_buffer, "ARMD");
         } else if (strncmp("SIM_RELEASE", socket_buffer, 11) == 0) {
             err = cmd_release(command_buffer);
-        } else if (strncmp("RELEASE", socket_buffer, 7) == 0) {
-            send_mcu_command(command_buffer, "RELEASE");
+        } else if (strncmp("RELS", socket_buffer, 7) == 0) {
+            send_mcu_command(command_buffer, "RELS");
         } else if (strncmp("SIM_RETRACT", socket_buffer, 11) == 0) {
             err = cmd_retract(command_buffer);
-        } else if (strncmp("RETRACT", socket_buffer, 7) == 0) {
-            send_mcu_command(command_buffer, "RETRACT");
+        } else if (strncmp("RETR", socket_buffer, 7) == 0) {
+            send_mcu_command(command_buffer, "RETR");
         } else if (strncmp("SIM_DISTANCE", socket_buffer, 12) == 0 && socket_buffer[14] != 0) {
             int _distance;
             if (sscanf(socket_buffer, "SIM_DISTANCE %d", &_distance) != 1) {
