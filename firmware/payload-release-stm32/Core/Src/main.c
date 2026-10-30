@@ -29,6 +29,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "read_uart.h"
+#include "servo_control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -182,6 +183,7 @@ int main(void)
           rels_start_ms = ticks_ms; 
           rels_started = true;
           rels_finished = false;
+          servo_release();
         } else if (rels_time - rels_start_ms > RELEASE_MS) {
           rels_finished = true;
           rels_started = false;
@@ -200,6 +202,7 @@ int main(void)
           retr_start_ms = ticks_ms; 
           retr_started = true;
           retr_finished = false;
+          servo_retract(); 
         } else if (retr_time - retr_start_ms > RETRACT_MS) {
           retr_finished = true;
           retr_started = false;
