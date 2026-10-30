@@ -17,14 +17,15 @@
 #define DUTY_MAX (PW_MAX / PERIOD_MS)
 #define CCR_MIN (DUTY_MIN * ARR)
 #define CCR_MAX (DUTY_MAX * ARR)
+
 // 0 deg = 5% duty cycle = 5% * ARR = 0.05 * 19999 = 999
 // 180 deg = 10% duty cycle = 0.1 * 19999 = 1999
-
 // converts degrees to pulse pulse width between pulse_min for 0 deg 
 // to pulse max for 180 deg and then to a fraction of ARR
+
 static inline int servo_move_to(uint16_t degrees) {
     if (degrees < MAX_DEG) {
-        uint32_t ccr = CCR_MIN + ((float)degrees / MAX_DEG) * (CCR_MIN / CCR_MAX); 
+        uint32_t ccr = CCR_MIN + (((float)degrees * (CCR_MAX - CCR_MIN)) / MAX_DEG); 
         TIM1->CCR1 = ccr;
         return 0; 
     } else {

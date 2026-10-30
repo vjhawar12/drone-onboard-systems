@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <time.h>
+#include <ctype.h>
 #include "read_uart.h"
 /* USER CODE END Includes */
 
@@ -51,14 +51,14 @@ typedef enum PayloadState {
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define LEN 5
+#define MAX_CMD_LEN 4
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
 static uint8_t character; 
-static uint8_t cmd[LEN];
+static uint8_t cmd[MAX_CMD_LEN];
 static uint8_t idx;   
 static bool rx_armed;
 static bool rx_releasing;
@@ -71,7 +71,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-extern uint32_t ticks_ms;
+extern volatile uint32_t ticks_ms;
 /* USER CODE END PFP */
   
 /* Private user code ---------------------------------------------------------*/
@@ -99,11 +99,11 @@ int main(void)
   long long retr_end_ms;
   long long rels_time;
   long long retr_time; 
-  bool rels_started;
-  bool retr_started;
-  bool rels_finished;
-  bool retr_finished;
-  bool char_ready; 
+  bool rels_started = false;
+  bool retr_started = false;
+  bool rels_finished = false;
+  bool retr_finished = false;
+  bool char_ready = false; 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -147,28 +147,23 @@ int main(void)
     // check if character array is a valid command
     // execute the command via dispatch table
     char_ready = read_character(&character); 
-    if (char_ready && character != 0) {
-      if (character == '\n') {
-        if (!strcmp((const char*)cmd, "LOCK\n")) {
+    if (char_ready && isalpha(char_ready) && character != 0) {
+      cmd[idx++] = character;
+      if (idx == MAX_CMD_LEN) {
+        idx = 0; 
+      } else if (idx == MAX_CMD_LEN) {
+        if (!strncmp((const char*)cmd, "LOCK", MAX_CMD_LEN)) {
           rx_armed = false;
           rx_releasing = false;
-        } else if (!strcmp((const char*)cmd, "ARMD\n")) {
+        } else if (!strncmp((const char*)cmd, "ARMD", MAX_CMD_LEN)) {
           rx_armed = true;
           rx_releasing = false;
-        } else if (!strcmp((const char*)cmd, "RELS\n")) {
+        } else if (!strncmp((const char*)cmd, "RELS", MAX_CMD_LEN)) {
           rx_releasing = true;
           rx_armed = false;
-        } else {
-          rx_armed = false;
-          rx_releasing = false;
-        }
-      } else if (idx <= LEN - 1) {
-        cmd[idx++] = character;
-      } else {
-        idx = 0; 
+        } 
       }
     }
-
     switch (state) {
       case LOCKED:
         if (rx_armed) {
